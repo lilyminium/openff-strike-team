@@ -80,6 +80,7 @@ def plot_mm_vs_qm_profile(
     qm_dataset,
     output_directory=None,
     with_rmsds: bool = True,
+    suffix: str = ""
 ):    
     subset = qm_dataset.filter(pc.field("torsiondrive_id") == torsiondrive_id)
     df = subset.to_table().to_pandas()
@@ -135,7 +136,10 @@ def plot_mm_vs_qm_profile(
     output_directory = pathlib.Path(output_directory)
     output_directory.mkdir(exist_ok=True, parents=True)
 
-    imgfile = output_directory / f"{torsiondrive_id}.png"
+    basename = "qm-vs-mm"
+    if with_rmsds:
+        basename += "-rmsd"
+    imgfile = output_directory / f"{basename}{suffix}.png"
     plt.savefig(imgfile, dpi=300)
     print(f"Saved to {imgfile}")
 
@@ -186,6 +190,12 @@ def plot_mm_vs_qm_profile(
     help="The path to the parameter id to torsion ids mapping.",
     default="parameter_id_to_torsion_ids.json"
 )
+@click.option(
+    "--suffix",
+    type=str,
+    help="The suffix to append to the output file.",
+    default=""
+)
 def plot_all(
     parameter_id: str,
     with_rmsds: bool = False,
@@ -194,7 +204,14 @@ def plot_all(
     mm_dataset_path: str = "datasets/mm/singlepoint-torsiondrive-datasets",
     forcefield: str = "tm-2.2.offxml",
     parameter_ids_to_torsions_path: str = "parameter_id_to_torsion_ids.json",
+    suffix: str = ""
 ):
+    """
+    Plot QM vs MM profile with optional RMSDs if using minimized geometries.
+
+    Outputs are saved in the following structure:
+    output_directory/forcefield/parameter_id/qm-vs-mm/torsion_id.png
+    """
     qm_dataset = ds.dataset(qm_dataset_path)
     mm_dataset = ds.dataset(mm_dataset_path)
     if "forcefield" in mm_dataset.schema.names:
@@ -215,12 +232,12 @@ def plot_all(
             qm_dataset,
             output_directory=(
                 output_directory
-                / parameter_id
                 / ff_name
-                / "qm-vs-mm"
+                / parameter_id
                 / str(torsion_id)
             ),
-            with_rmsds=with_rmsds
+            with_rmsds=with_rmsds,
+            suffix=suffix
         )
 
 

@@ -59,9 +59,16 @@ def calc_torsion_energy(angle, parameter):
     default="../images"
 )
 def plot_ff_torsions(forcefield: str, output_directory: str):
-    output_directory = pathlib.Path(output_directory)
-    output_directory.mkdir(exist_ok=True, parents=True)
+    """
+    Plots the torsion profiles of a force field.
+
+    Outputs are saved in the following format:
+    output_directory/forcefield_name/parameter_id/forcefield.png
+    """
     name = pathlib.Path(forcefield).stem
+    output_directory = pathlib.Path(output_directory) / name
+    output_directory.mkdir(exist_ok=True, parents=True)
+    
     ff = ForceField(forcefield, allow_cosmetic_attributes=True)
     handler = ff.get_parameter_handler("ProperTorsions")
     for parameter in tqdm.tqdm(handler.parameters):
@@ -75,12 +82,12 @@ def plot_ff_torsions(forcefield: str, output_directory: str):
         ax.set_title(parameter.id)
         ax.set_ylabel("Energy\n[kcal/mol]")
         plt.tight_layout()
-        filename = output_directory / f"{parameter.id}/{name}.png"
-        parent = pathlib.Path(filename).parent
-        parent.mkdir(exist_ok=True, parents=True)
+        filename = output_directory / parameter.id / f"forcefield.png"
+        filename.parent.mkdir(exist_ok=True, parents=True)
 
         plt.savefig(filename, dpi=300)
         print(f"Saved to {filename}")
+        plt.close()
 
 
 if __name__ == "__main__":

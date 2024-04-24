@@ -1,0 +1,29 @@
+name: strike-team-torsions
+channels:
+  - conda-forge
+  - openeye
+dependencies:
+  # data
+  - pyarrow
+
+  # openff
+  - openff-nagl-base >=0.3.7
+  - openff-interchange-base >=0.3.25
+  - openff-toolkit-base >=0.15.2
+
+  # chemistry
+  - rdkit
+  - openmm >=8.1.1
+  - openeye-toolkits ==2022.1.1
+
+  # value calculation
+  - mdanalysis
+
+  # plotting
+  - seaborn
+
+  - pip:
+    # molecule visualization / format conversion
+    - cairosvg
+    - reportlab
+    - svglib

@@ -59,11 +59,14 @@ def main(
 
         parameter_id_to_torsion_ids[parameter_id].append(torsion_id)
 
-    print(f"Found {len(errors)} errors.")
     with open(output_file, "w") as f:
         json.dump(parameter_id_to_torsion_ids, f)
-    
     print(f"Saved {output_file}")
+
+    print(
+        f"Found {len(errors)} errors where dihedral "
+        f"cannot be labelled by {forcefield}."
+    )
     for error in errors:
         print(error)
 

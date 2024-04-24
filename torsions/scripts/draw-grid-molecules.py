@@ -9,8 +9,27 @@ def draw_grid_df(
     n_page: int = 24,
     subImgSize=(300, 300),
 ):
-    from PIL import Image
-    from rdkit import Chem
+    """
+    Draw molecules
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The dataframe containing the molecules to draw.
+    use_svg : bool, optional
+        Whether to use SVG format, by default True
+    output_file : str, optional
+        The output file to save the images, by default None.
+        If None, the images are not saved.
+        If there are more than `n_page` images,
+        the images are saved in chunks.
+    n_col : int, optional
+        The number of columns in the grid, by default 4
+    n_page : int, optional
+        The number of images per page, by default 24
+    subImgSize : tuple, optional
+        The size of the subimages, by default (300, 300)
+    """
     from rdkit.Chem import Draw
     from openff.toolkit import Molecule
     from svglib.svglib import svg2rlg
@@ -49,7 +68,7 @@ def draw_grid_df(
             molsPerRow=n_col,
             legends=legends_chunk,
             subImgSize=subImgSize,
-            maxMols=n_page,
+            # maxMols=n_page,
             highlightAtomLists=tags_chunk,
             returnPNG=False,
             useSVG=use_svg,
@@ -71,8 +90,12 @@ def draw_grid_df(
                     cwd = os.getcwd()
                     os.chdir(tempdir)
 
+                    try:
+                        data = img.data
+                    except AttributeError:
+                        data = img
                     with open("temp.svg", "w") as f:
-                        f.write(img.data)
+                        f.write(data)
                     drawing = svg2rlg("temp.svg")
                 os.chdir(cwd)
                 renderPM.drawToFile(drawing, file, fmt="PNG")

@@ -93,7 +93,7 @@ def plot_grouped_minimization_energies_singlepoint(
     g.add_legend()
 
     output_directory.mkdir(exist_ok=True, parents=True)
-    file = output_directory / "grouped-minimizations.png"
+    file = output_directory / "singlepoint-energies-breakdown.png"
     g.savefig(file, dpi=300)
     print(f"Saved to {file}")
 
@@ -164,9 +164,8 @@ def plot_all(
             qm_dataset,
             output_directory=(
                 output_directory
-                / parameter_id
                 / ff_name
-                / "singlepoint-energies"
+                / parameter_id
                 / str(torsion_id)
             )
         )
