@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
 import argparse
-import io
+import contextlib
+import functools
+import multiprocessing
 import tempfile
 import warnings
 
@@ -20,6 +22,12 @@ parser.add_argument(
     "-o", "--output",
     type=str,
     help="Path to the output CSV file.",
+)
+parser.add_argument(
+    "--nproc",
+    type=int,
+    default=1,
+    help="Number of processors to use.",
 )
 parser.add_argument(
     "--no-write-all",
@@ -41,7 +49,8 @@ def main():
     search_all_smiles(
         smiles,
         args.output,
-        args.no_write_all,
+        nprocs=args.nproc,
+        write_all=args.no_write_all,
     )
 
 
@@ -66,6 +75,7 @@ def draw_checkmol():
 def search_all_smiles(
     smiles: list[str],
     output_file: str,
+    nprocs: int = 1,
     write_all: bool = True,
 ):
     forcefield = load_forcefield()
@@ -73,15 +83,31 @@ def search_all_smiles(
     for parameter_id in LOW_COVERAGE_PARAMETERS:
         empty_entry[parameter_id] = False
     all_entries = []
-    for smi in _progress_bar(smiles, desc="Labeling SMILES"):
-        try:
-            new_entry = label_single_smiles(smi, forcefield, empty_entry)
-        except Exception as e:
-            print(f"Error processing {smi}: {e}")
-            continue
-        new_entry["Count"] = sum(new_entry.values())
-        new_entry["SMILES"] = smi
-        all_entries.append(new_entry)
+
+    labeller = functools.partial(
+        label_single_smiles,
+        forcefield=forcefield,
+        empty_entry=empty_entry,
+    )
+    with multiprocessing.Pool(nprocs) as pool:
+        all_entries = list(
+            _progress_bar(
+                pool.imap(labeller, smiles),
+                desc="Labeling SMILES",
+                total=len(smiles),
+            )
+        )
+    #     for new_entry in pool.imap(labeller, smiles):
+    #         all_entries.append(new_entry)
+    # for smi in _progress_bar(smiles, desc="Labeling SMILES"):
+    #     try:
+    #         new_entry = label_single_smiles(smi, forcefield, empty_entry)
+    #     except Exception as e:
+    #         print(f"Error processing {smi}: {e}")
+    #         continue
+    #     new_entry["Count"] = sum(new_entry.values())
+    #     new_entry["SMILES"] = smi
+    #     all_entries.append(new_entry)
     all_entries = sorted(all_entries, key=lambda x: x["Count"], reverse=True)
 
     # manually write out CSV
@@ -116,8 +142,7 @@ def label_single_smiles(
     empty_entry: dict[str, bool],
 ):
     # ignore warnings about stereo
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="Warning (not error because allow_undefined_stereo=True)")
+    with capture_toolkit_warnings():
         mol = Molecule.from_smiles(smi, allow_undefined_stereo=True)
 
     entry = dict(empty_entry)
@@ -134,9 +159,34 @@ def label_single_smiles(
             label = parameter.id if parameter.id else parameter.name
             if label in entry:
                 entry[label] = True
+
+    entry["Count"] = sum(entry.values())
+    entry["SMILES"] = smi
     return entry
 
+@contextlib.contextmanager
+def capture_toolkit_warnings(run: bool = True):  # pragma: no cover
+    """A convenience method to capture and discard any warning produced by external
+    cheminformatics toolkits excluding the OpenFF toolkit. This should be used with
+    extreme caution and is only really intended for use when processing tens of
+    thousands of molecules at once."""
 
+    import logging
+    import warnings
+
+    if not run:
+        yield
+        return
+
+    warnings.filterwarnings("ignore")
+
+    toolkit_logger = logging.getLogger("openff.toolkit")
+    openff_logger_level = toolkit_logger.getEffectiveLevel()
+    toolkit_logger.setLevel(logging.ERROR)
+
+    yield
+
+    toolkit_logger.setLevel(openff_logger_level)
 
 
 CHECKMOL_GROUPS: dict[str, str] = {
