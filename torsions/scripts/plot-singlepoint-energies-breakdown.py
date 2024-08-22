@@ -37,6 +37,9 @@ COLORS = {
     "gray": OPENFF_GRAY
 }
 
+def _get_dataset_column(dataset, column: str):
+    return dataset.to_table(columns=[column]).to_pydict()[column]
+
 def plot_grouped_minimization_energies_singlepoint(
     torsiondrive_id: int,
     mm_dataset,
@@ -47,20 +50,58 @@ def plot_grouped_minimization_energies_singlepoint(
     if not subset.count_rows():
         return
 
-    minimized = mm_dataset.filter(pc.field("torsiondrive_id") == torsiondrive_id)
-    geometry_df = minimized.to_table(
-        columns=[
-            "qcarchive_id",
-            "Bond",
-            "Angle",
-            "Torsion",
-            "vdW",
-            "Electrostatics",
-            "vdW 1-4",
-            "Electrostatics 1-4",
-            "mm_energy"
-        ]
-    ).to_pandas()
+    if "torsiondrive_id" in mm_dataset.schema.names:
+        minimized = mm_dataset.filter(pc.field("torsiondrive_id") == torsiondrive_id)
+    else:
+        minimized = mm_dataset.filter(
+            pc.field("qcarchive_id").isin(_get_dataset_column(subset, "qcarchive_id"))
+        )
+    if not minimized.count_rows():
+        return
+    
+    # energies can be called Torsion or energy_Torsion
+    # at some point this was renamed to avoid confusion with Bond IC RMSDs etc
+    if "Torsion" in minimized.schema.names:
+        geometry_df = minimized.to_table(
+            columns=[
+                "qcarchive_id",
+                "Bond",
+                "Angle",
+                "Torsion",
+                "vdW",
+                "Electrostatics",
+                "vdW 1-4",
+                "Electrostatics 1-4",
+                "mm_energy"
+            ]
+        ).to_pandas()
+    else:
+        # get energy_Torsion and rename...
+        geometry_df = minimized.to_table(
+            columns=[
+                "qcarchive_id",
+                "energy_Bond",
+                "energy_Angle",
+                "energy_Torsion",
+                "energy_vdW",
+                "energy_Electrostatics",
+                "energy_vdW 1-4",
+                "energy_Electrostatics 1-4",
+                "mm_energy"
+            ]
+        ).to_pandas()
+        geometry_df = geometry_df.rename(
+            columns={
+                "energy_Bond": "Bond",
+                "energy_Angle": "Angle",
+                "energy_Torsion": "Torsion",
+                "energy_vdW": "vdW",
+                "energy_Electrostatics": "Electrostatics",
+                "energy_vdW 1-4": "vdW 1-4",
+                "energy_Electrostatics 1-4": "Electrostatics 1-4",
+            }
+        )
+
     qca_ids_df = subset.to_table().to_pandas()
     df = qca_ids_df.merge(geometry_df, left_on=["qcarchive_id"], right_on=["qcarchive_id"], how="inner")
     df["Total"] = df["mm_energy"]
@@ -166,7 +207,7 @@ def plot_all(
     print(f"Filtered to {mm_dataset.count_rows()} MM records with forcefield {forcefield}")
 
 
-    if combinations is not None:
+    if combinations:
         allowed_torsiondrive_ids = []
         for combination in combinations:
             comb_df = pd.read_csv(combination)
@@ -179,7 +220,14 @@ def plot_all(
         expression = pc.field("torsiondrive_id").isin(allowed_torsiondrive_ids)
         qm_dataset = qm_dataset.filter(expression)
         print(f"Filtered to {qm_dataset.count_rows()} QM records with allowed torsiondrive ids")
-        mm_dataset = mm_dataset.filter(expression)
+
+        if "torsiondrive_id" in mm_dataset.schema.names:
+            mm_dataset = mm_dataset.filter(expression)
+        else:
+            expression2 = pc.field("qcarchive_id").isin(
+                _get_dataset_column(qm_dataset, "qcarchive_id")
+            )
+            mm_dataset = mm_dataset.filter(expression2)
         print(f"Filtered to {mm_dataset.count_rows()} MM records with allowed torsiondrive ids")
 
     with open(parameter_ids_to_torsions_path, "r") as f:
