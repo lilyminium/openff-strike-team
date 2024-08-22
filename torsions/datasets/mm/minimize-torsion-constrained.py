@@ -147,7 +147,7 @@ def benchmark_single(
 
     molecule._conformers = [minimized_positions]
     ic2 = ff.create_interchange(molecule.to_topology())
-    energies = get_openmm_energies(ic2)
+    energies = get_openmm_energies(ic2, combine_nonbonded_forces=False, detailed=True)
 
 
     n_heavy_atoms = sum(1 for atom in molecule.atoms if atom.atomic_number > 1)
