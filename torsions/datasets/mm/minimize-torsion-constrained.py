@@ -61,7 +61,7 @@ def minimize_constrained(
         # don't restrain dihedral atoms
         atom_indices = list(range(len(molecule.atoms)))
         if dihedral is not None:
-            atom_indices = sorted(set(atom_indices)) - set(dihedral)
+            atom_indices = sorted(set(atom_indices) - set(dihedral))
 
         # switch to nm now... just in case
         positions = interchange.positions.to(unit.nanometers)
