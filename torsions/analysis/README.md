@@ -13,6 +13,14 @@ python ../scripts/map-parameter-ids-to-torsions.py  \
     --output    parameter_id_to_torsion_ids.json
 ```
 
+Alternatively:
+
+```
+python ../scripts/map-parameter-ids-to-torsions.py  \
+    --input    /dfs9/dmobley-lab/lilyw7/datasets/qm/output/torsiondrive             \
+    --force-field   "new-tm-2.2.offxml"                 \
+    --output    parameter_id_to_torsion_ids_new-tm-2.2.json
+```
 
 ### Plot FF torsions
 
@@ -72,6 +80,19 @@ python ../scripts/plot-singlepoint-energies-breakdown.py            \
     --parameter-ids-to-torsions parameter_id_to_torsion_ids.json
 ```
 
+Alternatively:
+
+```
+python ../scripts/plot-singlepoint-energies-breakdown.py            \
+    --parameter-id      t72h                                                \
+    --output-directory  ../images                                           \
+    --qm-dataset        /dfs9/dmobley-lab/lilyw7/datasets/qm/output/torsiondrive                               \
+    --mm-dataset        ../datasets/mm/minimized-torsiondrive-datasets/new-tm-2.2    \
+    --forcefield        "new-tm-2.2.offxml"                                     \
+    --parameter-ids-to-torsions parameter_id_to_torsion_ids_new-tm-2.2.json
+
+```
+
 
 ### Plotting QM vs MM
 
@@ -123,6 +144,19 @@ python ../scripts/plot-individual-energy-breakdowns.py  \
 ```
 
 Produces, e.g., `../images/tm-2.2/t60g/17291347/individual-energy-breakdowns-mm/images/a10_0-1-3.png` (among many others).
+
+Alternatively:
+
+```
+python ../scripts/plot-individual-energy-breakdowns.py  \
+    --torsiondrive-id   119466831                                        \
+    --output-directory  ../images                                       \
+    --forcefield        "new-tm-2.2.offxml"                                 \
+    --qm-dataset        /dfs9/dmobley-lab/lilyw7/datasets/qm/output/torsiondrive                           \
+    --mm-dataset        ../datasets/mm/minimized-torsiondrive-datasets/new-tm-2.2  \
+    --geometry          "mm"
+
+```
 
 
 ### Generate PDBs

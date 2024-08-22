@@ -36,25 +36,55 @@ def minimize_constrained(
     molecule,
     forcefield,
     dihedral = None,
+    add_restraint: bool = True,
+    restrain_k: float = 1,  # kcal/mol/AA
 ):
     import openmm
     import openmm.unit
     from openff.units import unit
-    from openff.units.openmm import from_openmm
+    from openff.units.openmm import from_openmm, to_openmm
     from openff.toolkit import Molecule, ForceField
     from openff.interchange.operations.minimize import _DEFAULT_ENERGY_MINIMIZATION_TOLERANCE
+    from openmm.openmm import CustomExternalForce
 
     forcefield = ForceField(forcefield, allow_cosmetic_attributes=True)
     interchange = forcefield.create_interchange(molecule.to_topology())
 
-    simulation = interchange.to_openmm_simulation(
-        openmm.LangevinMiddleIntegrator(
-            293.15 * openmm.unit.kelvin,
-            1.0 / openmm.unit.picosecond,
-            2.0 * openmm.unit.femtosecond,
-        ),
-        combine_nonbonded_forces=True,
-    )
+    # create external force
+    if add_restraint:
+        restraint_force = CustomExternalForce("0.5*k*((x-x0)^2+(y-y0)^2+(z-z0)^2)")
+        k_unit = openmm.unit.kilocalorie_per_mole / openmm.unit.angstrom**2
+        restraint_force.addGlobalParameter("k", restrain_k * k_unit)
+        for parameter in ("x0", "y0", "z0"):
+            restraint_force.addPerParticleParameter(parameter)
+
+        # don't restrain dihedral atoms
+        atom_indices = list(range(len(molecule.atoms)))
+        if dihedral is not None:
+            atom_indices = sorted(set(atom_indices) - set(dihedral))
+
+        # switch to nm now... just in case
+        positions = interchange.positions.to(unit.nanometers)
+            
+        for i, atom_index in enumerate(atom_indices):
+            restraint_force.addParticle(atom_index)
+            restraint_force.setParticleParameters(
+                i, atom_index,
+                [to_openmm(x) for x in positions[atom_index]]
+            )
+
+    try:
+        simulation = interchange.to_openmm_simulation(
+            openmm.LangevinMiddleIntegrator(
+                293.15 * openmm.unit.kelvin,
+                1.0 / openmm.unit.picosecond,
+                2.0 * openmm.unit.femtosecond,
+            ),
+            combine_nonbonded_forces=True,
+            additional_forces=[restraint_force]
+        )
+    except TypeError:
+        raise TypeError("Interchange needs to be >=0.3.24")
 
     simulation.context.computeVirtualSites()
 
@@ -117,7 +147,7 @@ def benchmark_single(
 
     molecule._conformers = [minimized_positions]
     ic2 = ff.create_interchange(molecule.to_topology())
-    energies = get_openmm_energies(ic2)
+    energies = get_openmm_energies(ic2, combine_nonbonded_forces=False, detailed=True)
 
 
     n_heavy_atoms = sum(1 for atom in molecule.atoms if atom.atomic_number > 1)
@@ -196,6 +226,15 @@ def batch_compute(
     type=click.Path(exists=False, dir_okay=True, file_okay=False),
     help="The path to the output Parquet path.",
 )
+@click.option(
+    "--torsiondrive-id",
+    "torsiondrive_ids",
+    type=int,
+    multiple=True,
+    default=[],
+    required=False,
+    help="Restrict calculation to these torsiondrive IDs",
+)
 @optgroup.group("Parallelization configuration")
 @optgroup.option(
     "--n-workers",
@@ -250,6 +289,7 @@ def compute_benchmarks(
     force_field: str,
     output_dataset: str,
     input_dataset_path,
+    torsiondrive_ids: list[int] = [],
     worker_type: typing.Literal["slurm", "local"] = "local",
     queue: str = "free",
     conda_environment: str = "ib-dev",
@@ -275,6 +315,10 @@ def compute_benchmarks(
         "energy",
         "dihedral",
     ]
+    if torsiondrive_ids:
+        expression = pc.field("torsiondrive_id").isin(torsiondrive_ids)
+        dataset = dataset.filter(expression)
+
     entries = dataset.to_table(columns=columns).to_pylist()
 
     output_directory = pathlib.Path(output_dataset)
