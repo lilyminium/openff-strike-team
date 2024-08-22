@@ -226,6 +226,15 @@ def batch_compute(
     type=click.Path(exists=False, dir_okay=True, file_okay=False),
     help="The path to the output Parquet path.",
 )
+@click.option(
+    "--torsiondrive-id",
+    "torsiondrive_ids",
+    type=int,
+    multiple=True,
+    default=[],
+    required=False,
+    help="Restrict calculation to these torsiondrive IDs",
+)
 @optgroup.group("Parallelization configuration")
 @optgroup.option(
     "--n-workers",
@@ -280,6 +289,7 @@ def compute_benchmarks(
     force_field: str,
     output_dataset: str,
     input_dataset_path,
+    torsiondrive_ids: list[int] = [],
     worker_type: typing.Literal["slurm", "local"] = "local",
     queue: str = "free",
     conda_environment: str = "ib-dev",
@@ -305,6 +315,10 @@ def compute_benchmarks(
         "energy",
         "dihedral",
     ]
+    if torsiondrive_ids:
+        expression = pc.field("torsiondrive_id").isin(torsiondrive_ids)
+        dataset = dataset.filter(expression)
+
     entries = dataset.to_table(columns=columns).to_pylist()
 
     output_directory = pathlib.Path(output_dataset)
