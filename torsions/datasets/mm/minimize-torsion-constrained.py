@@ -36,25 +36,55 @@ def minimize_constrained(
     molecule,
     forcefield,
     dihedral = None,
+    add_restraint: bool = True,
+    restrain_k: float = 1,  # kcal/mol/AA
 ):
     import openmm
     import openmm.unit
     from openff.units import unit
-    from openff.units.openmm import from_openmm
+    from openff.units.openmm import from_openmm, to_openmm
     from openff.toolkit import Molecule, ForceField
     from openff.interchange.operations.minimize import _DEFAULT_ENERGY_MINIMIZATION_TOLERANCE
+    from openmm.openmm import CustomExternalForce
 
     forcefield = ForceField(forcefield, allow_cosmetic_attributes=True)
     interchange = forcefield.create_interchange(molecule.to_topology())
 
-    simulation = interchange.to_openmm_simulation(
-        openmm.LangevinMiddleIntegrator(
-            293.15 * openmm.unit.kelvin,
-            1.0 / openmm.unit.picosecond,
-            2.0 * openmm.unit.femtosecond,
-        ),
-        combine_nonbonded_forces=True,
-    )
+    # create external force
+    if add_restraint:
+        restraint_force = CustomExternalForce("0.5*k*((x-x0)^2+(y-y0)^2+(z-z0)^2)")
+        k_unit = openmm.unit.kilocalorie_per_mole / openmm.unit.angstrom**2
+        restraint_force.addGlobalParameter("k", restrain_k * k_unit)
+        for parameter in ("x0", "y0", "z0"):
+            restraint_force.addPerParticleParameter(parameter)
+
+        # don't restrain dihedral atoms
+        atom_indices = list(range(len(molecule.atoms)))
+        if dihedral is not None:
+            atom_indices = sorted(set(atom_indices)) - set(dihedral)
+
+        # switch to nm now... just in case
+        positions = interchange.positions.to(unit.nanometers)
+            
+        for i, atom_index in enumerate(atom_indices):
+            restraint_force.addParticle(atom_index)
+            restraint_force.setParticleParameters(
+                i, atom_index,
+                [to_openmm(x) for x in positions[atom_index]]
+            )
+
+    try:
+        simulation = interchange.to_openmm_simulation(
+            openmm.LangevinMiddleIntegrator(
+                293.15 * openmm.unit.kelvin,
+                1.0 / openmm.unit.picosecond,
+                2.0 * openmm.unit.femtosecond,
+            ),
+            combine_nonbonded_forces=True,
+            additional_forces=[restraint_force]
+        )
+    except TypeError:
+        raise TypeError("Interchange needs to be >=0.3.24")
 
     simulation.context.computeVirtualSites()
 
