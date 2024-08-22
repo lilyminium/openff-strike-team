@@ -4,6 +4,25 @@ This was generated outside this repo on HPC3.
 
 The scripts here minimize TorsionDrive conformers and evaluate the energies.
 
+For example:
+
+
+```
+python minimize-torsion-constrained.py                          \
+        --n-workers                     300                     \
+        --worker-type                   "slurm"                 \
+        --batch-size                    50                      \
+        --memory                        4                       \
+        --walltime                      480                     \
+        --queue                         "free"                  \
+        --conda-environment             "ib-dev"                \
+    --input         "/dfs9/dmobley-lab/lilyw7/datasets/qm/output/torsiondrive" \
+    --force-field   "new-tm-2.2.offxml"          \
+    --torsiondrive-id   119466831                       \
+    --output        "minimized-torsiondrive-datasets/new-tm-2.2"     \
+
+```
+
 ## Files
 
 - run-*.sh files show intended usage of Python scripts.
