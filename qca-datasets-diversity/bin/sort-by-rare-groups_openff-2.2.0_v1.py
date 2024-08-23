@@ -32,7 +32,8 @@ parser = argparse.ArgumentParser(
         "If the flag --no-write-all is set, only these two columns will be written. "
         "If the flag is not set, all the rare environments that were searched for will be written "
         "as well, with boolean values to indicate if they are present or not."
-    )
+    ),
+    formatter_class=argparse.RawDescriptionHelpFormatter  # preserve newlines
 )
 parser.add_argument(
     "-i", "--input",
@@ -45,7 +46,7 @@ parser.add_argument(
     help="Path to the output CSV file.",
 )
 parser.add_argument(
-    "--nproc",
+    "-np", "--nproc",
     type=int,
     default=1,
     help="Number of processors to use.",
