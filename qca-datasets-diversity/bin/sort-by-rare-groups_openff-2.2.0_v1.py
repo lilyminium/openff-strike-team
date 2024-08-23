@@ -1,22 +1,43 @@
 #!/usr/bin/env python3
+"""
+Date: 2024-08-23
+
+This one-file script takes an input of molecules in SMILES format
+and sorts them by the number of matches to rare environments.
+
+The rare environments include a list of functional groups and OpenFF 2.2.0 parameters
+for which there is low coverage in our already available data.
+
+"""
 
 import argparse
 import contextlib
 import functools
 import multiprocessing
 import tempfile
-import warnings
 
 from openff.toolkit.topology import Molecule
 from openff.toolkit.typing.engines.smirnoff import ForceField
+import pandas as pd
 
 parser = argparse.ArgumentParser(
-    description="Sort a list of SMILES strings by the number of diverse chemical environments."
+    description=(
+        "Sort a list of SMILES strings by the number of matches to rare environments. "
+        "This takes in a list of SMILES strings and outputs a CSV file with the SMILES "
+        "strings and the number of matches to rare environments.\n"
+        "The rare environments include a list of functional groups and OpenFF 2.2.0 parameters "
+        "for which there is low coverage in our already available data.\n"
+        "The output CSV file will contain columns for SMILES strings (column: 'SMILES', type: str) "
+        "and the number of matches to rare environments (column: 'Count', type: int). "
+        "If the flag --no-write-all is set, only these two columns will be written. "
+        "If the flag is not set, all the rare environments that were searched for will be written "
+        "as well, with boolean values to indicate if they are present or not."
+    )
 )
 parser.add_argument(
     "-i", "--input",
     type=str,
-    help="Path to a file containing SMILES strings.",
+    help="Path to a file containing SMILES strings, with one on each line.",
 )
 parser.add_argument(
     "-o", "--output",
@@ -35,7 +56,8 @@ parser.add_argument(
     help=(
         "Write all columns to the CSV file. "
         "If False, only columns for SMILES and the number "
-        "of diverse environments will be written."
+        "matches to rare groups will be written. "
+        "If True, all the rare groups that were searched for will be written."
     )
 )
 
@@ -55,7 +77,12 @@ def main():
 
 
 def draw_checkmol():
-    """Draw the checkmol SMARTS for verification."""
+    """
+    Draw the checkmol SMARTS for verification.
+    
+    This is not used in the main script, but can be used to generate a
+    visual representation of the checkmol groups.
+    """
     from rdkit import Chem
     from rdkit.Chem import Draw
 
@@ -78,6 +105,23 @@ def search_all_smiles(
     nprocs: int = 1,
     write_all: bool = True,
 ):
+    """
+    Search all SMILES strings for rare environments and write to a CSV file.
+
+    Parameters
+    ----------
+    smiles : list[str]
+        List of SMILES strings to search.
+    output_file : str
+        Path to the output CSV file.
+    nprocs : int, optional
+        Number of processors to use, by default 1.
+    write_all : bool, optional
+        Write all columns to the CSV file. If False, only columns for SMILES
+        and the number of diverse environments will be written.
+        If True, all the rare groups that were searched for will be written
+        as well. Default True.
+    """
     forcefield = load_forcefield()
     empty_entry = {group: False for group in CHECKMOL_GROUPS}
     for parameter_id in LOW_COVERAGE_PARAMETERS:
@@ -97,32 +141,22 @@ def search_all_smiles(
                 total=len(smiles),
             )
         )
-    #     for new_entry in pool.imap(labeller, smiles):
-    #         all_entries.append(new_entry)
-    # for smi in _progress_bar(smiles, desc="Labeling SMILES"):
-    #     try:
-    #         new_entry = label_single_smiles(smi, forcefield, empty_entry)
-    #     except Exception as e:
-    #         print(f"Error processing {smi}: {e}")
-    #         continue
-    #     new_entry["Count"] = sum(new_entry.values())
-    #     new_entry["SMILES"] = smi
-    #     all_entries.append(new_entry)
-    all_entries = sorted(all_entries, key=lambda x: x["Count"], reverse=True)
 
-    # manually write out CSV
+    all_entries = sorted(all_entries, key=lambda x: x["Count"], reverse=True)
+    df = pd.DataFrame(all_entries)
+
     keys = ["SMILES", "Count"]
     if write_all:
         keys += list(empty_entry.keys())
-    with open(output_file, "w") as f:
-        f.write(",".join(keys) + "\n")
-        for entry in all_entries:
-            f.write(",".join(str(entry[key]) for key in keys) + "\n")
+    
+    df = df[keys]
+    df.to_csv(output_file, index=False)
     print(f"Wrote {len(all_entries)} entries to {output_file}")
 
 
 
 def _progress_bar(iterable_, **kwargs):
+    """Try to use tqdm if it is available, otherwise return the iterable."""
     try:
         import tqdm
         return tqdm.tqdm(iterable_, **kwargs)
@@ -130,6 +164,7 @@ def _progress_bar(iterable_, **kwargs):
         return iterable_
 
 def load_forcefield():
+    """Load the OpenFF 2.2.0 force field from the string below."""
     # write force field to temp file and load
     with tempfile.NamedTemporaryFile("w") as f:
         f.write(SAGE_22_FORCEFIELD)
@@ -141,6 +176,7 @@ def label_single_smiles(
     forcefield: ForceField,
     empty_entry: dict[str, bool],
 ):
+    """Label a single SMILES string with rare environments."""
     # ignore warnings about stereo
     with capture_toolkit_warnings():
         mol = Molecule.from_smiles(smi, allow_undefined_stereo=True)
@@ -189,6 +225,25 @@ def capture_toolkit_warnings(run: bool = True):  # pragma: no cover
     toolkit_logger.setLevel(openff_logger_level)
 
 
+
+
+
+
+#  ____                                                           
+# |  _ \ __ _ _ __ ___                                            
+# | |_) / _` | '__/ _ \                                           
+# |  _ < (_| | | |  __/                                           
+# |_| \_\__,_|_|  \___|                                   _       
+#   ___ _ ____   _(_)_ __ ___  _ __  _ __ ___   ___ _ __ | |_ ___ 
+#  / _ \ '_ \ \ / / | '__/ _ \| '_ \| '_ ` _ \ / _ \ '_ \| __/ __|
+# |  __/ | | \ V /| | | | (_) | | | | | | | | |  __/ | | | |_\__ \
+#  \___|_| |_|\_/ |_|_|  \___/|_| |_|_| |_| |_|\___|_| |_|\__|___/
+
+
+# If updating this script, this section should be updated as well.
+
+# checkmol groups:
+# these were identified using the checkmol software.
 CHECKMOL_GROUPS: dict[str, str] = {
     # 0 coverage
     "Acyl halide": "[#9,#17,#35,#53:1]-[#6X3:2](=O)[#6X4]", # acyl bromide, fluoride, iodide
@@ -701,5 +756,4 @@ SAGE_22_FORCEFIELD = """\
 
 
 if __name__ == "__main__":
-    # draw_checkmol()
     main()
